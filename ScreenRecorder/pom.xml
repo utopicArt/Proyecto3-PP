@@ -37,6 +37,11 @@
             <groupId>javax.media</groupId>
             <artifactId>jmf</artifactId>
             <version>2.1.1e</version>
-        </dependency>                     
+        </dependency> 
+        <dependency>
+            <groupId>com.aparapi</groupId>
+            <artifactId>aparapi</artifactId>
+            <version>3.0.0</version>
+        </dependency>                            
     </dependencies>
 </project>

@@ -26,6 +26,7 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import com.aparapi.Kernel;
 
 /**
  * @author: Adrian Marin Alcala 
@@ -49,9 +50,10 @@ public class ScreenshotController implements ActionListener {
     static Queue<BufferedImage> screenShot2Save = new LinkedList<>();
     static Queue<Image> replay = new LinkedList<>();
     static Queue<String> screenshotTimeStamp = new LinkedList<>();
-    Thread takeSSTrhead = null;
-    Thread showThread = null;
-    Thread saveThread = null;
+    Kernel takeSSTrhead = null;
+    Kernel showThread = null;
+    Kernel saveThread = null;
+    Thread watchdog = null;
     File folder;
     Rectangle rec;
     static boolean isRecording = false;
@@ -94,64 +96,102 @@ public class ScreenshotController implements ActionListener {
         rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());        
     }
 
-    private void initThreads() {
+    private synchronized void initThreads() {
         if (takeSSTrhead == null) {
-            takeSSTrhead = new Thread(() -> {
-                while (true) {
-                    while (isRecording) {
-                        try {
-                            takeScreenshot();
-                        } catch (IOException ex) {
-                            JOptionPane.showMessageDialog(null,
-                                    "Ocurrio un error:" + ex.getMessage(),
-                                    "Error al tomar SS", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                    if (statusInfo == 2) {
-                        if (screenShot2Save.isEmpty()) {
-                            controllerBtn.setEnabled(false);
-                            try {
-                                Thread.sleep(1500);
-                            } catch (InterruptedException ex) {
-                                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+            takeSSTrhead = new Kernel() {
+                @Override
+                public void run() {
+                    while (true) {
+                        while (isRecording) {
+                            if (!showThread.isExecuting() && isRecording) {
+                                System.err.println("Mostrar");
+                                showThread.execute(1024);
                             }
-                            createVideo();
-                            statusInfo = 0;
-                            controllerBtn.setEnabled(true);
+                            try {
+                                takeScreenshot();
+                            } catch (IOException ex) {
+                                JOptionPane.showMessageDialog(null,
+                                        "Ocurrio un error:" + ex.getMessage(),
+                                        "Error al tomar SS", JOptionPane.ERROR_MESSAGE);
+                            }
+                        }
+                        if (statusInfo == 2) {
+                            if (screenShot2Save.isEmpty()) {
+                                controllerBtn.setEnabled(false);
+                                try {
+                                    Thread.sleep(1500);
+                                } catch (InterruptedException ex) {
+                                    Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+                                }
+                                createVideo();
+                                statusInfo = 0;
+                                controllerBtn.setEnabled(true);
+                            }
                         }
                     }
                 }
-            }, "screenCapture");
+
+            };
         }
         if (showThread == null) {
-            showThread = new Thread(() -> {
-                while (true) {
-                    showVideo();
+            showThread = new Kernel() {
+                @Override
+                public void run() {
+                    while (true) {
+                        showVideo();
+                    }
                 }
-            }, "realTimeCapture");
+            };
         }
         if (saveThread == null) {
-            saveThread = new Thread(() -> {
-                while (true) {
-                    if (screenShot2Save.peek()!= null && screenshotTimeStamp.peek() != null) {
-                        System.err.println("[!]Guardando");
-                        saveScreenshots();
-                    }
-                    if (statusInfo == 2) {
-                        if (screenShot2Save.isEmpty()) {
-                            controllerBtn.setEnabled(false);
-                            try {
-                                Thread.sleep(1500);
-                            } catch (InterruptedException ex) {
-                                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+            saveThread = new Kernel() {
+                @Override
+                public void run() {
+                    while (true) {
+                        if (screenShot2Save.peek() != null && screenshotTimeStamp.peek() != null) {
+                            System.err.println("[!]Guardando");
+                            saveScreenshots();
+                        }
+                        if (statusInfo == 2) {
+                            if (screenShot2Save.isEmpty()) {
+                                controllerBtn.setEnabled(false);
+                                try {
+                                    Thread.sleep(1500);
+                                } catch (InterruptedException ex) {
+                                    Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+                                }
+                                createVideo();
+                                statusInfo = 0;
+                                controllerBtn.setEnabled(true);
                             }
-                            createVideo();
-                            statusInfo = 0;
-                            controllerBtn.setEnabled(true);
                         }
                     }
                 }
-            }, "Save Screenshots");
+            };
+        }
+        if(watchdog == null){
+            watchdog = new Thread(() -> {
+                while (true) {
+                    if (!takeSSTrhead.isExecuting() && isRecording){
+                        System.err.println("Tomar");
+                        takeSSTrhead.execute(1024);
+                    }
+                    if (!saveThread.isExecuting() && isRecording){
+                        System.err.println("Guardar");
+                        saveThread.execute(1024);
+                    }
+
+                    /*if(!isRecording && takeSSTrhead.isExecuting()){
+                        try {
+                            takeSSTrhead.wait();
+                            showThread.wait();
+                            saveThread.wait();       
+                        } catch (InterruptedException ex) {
+                            Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                    }*/
+                }
+            });
         }
     }
     
@@ -172,18 +212,21 @@ public class ScreenshotController implements ActionListener {
         screenshotTimeStamp.add(directory + date + ".jpg");
         screenShot.add(screenshotTaken);
         screenShot2Save.add(screenshotTaken);
+        System.err.println("Imagen tomada");
         if (screenShot2Save.peek()!= null && screenshotTimeStamp.peek() != null) {
             saveScreenshots();
         }
     }
 
-    private void saveScreenshots() {
+    private synchronized void saveScreenshots() {
         try {
             ImageIO.write(screenShot2Save.poll(), "JPG",
                     new File(screenshotTimeStamp.poll()));           
         } catch (IOException ex) {
             Logger.getLogger(ScreenshotController.class.getName())
                     .log(Level.SEVERE, null, ex);
+        }finally{
+            System.err.println("SS Guardada");
         }
     }
 
@@ -228,7 +271,7 @@ public class ScreenshotController implements ActionListener {
         }
     }
 
-    public void showVideo() {
+    public synchronized void showVideo() {
         System.out.print("");
         if (screenShot.peek() != null) {
             try {
@@ -254,18 +297,11 @@ public class ScreenshotController implements ActionListener {
         triggerBtn.setBackground((isRecording
                 ? new Color(230, 20, 20) : new Color(189, 189, 189)));
         triggerBtn.setEnabled(false);
-
-        /*if (saveThread.getState() == Thread.State.NEW) {
-            saveThread.setPriority(Thread.MAX_PRIORITY);
-            saveThread.start();
-        }*/     
-        if (takeSSTrhead.getState() == Thread.State.NEW) {
-            takeSSTrhead.start();
-        }
-        if (showThread.getState() == Thread.State.NEW) {
-            showThread.start();
-        }
-        // Al inicia pesa 237.79296875
+        
+        if(watchdog.getState() == Thread.State.NEW)
+            watchdog.start();
+  
+        // Al inicia pesa 248.046875mb
         System.out.println(getMemoryUsage() + "gb");
     }
 }
