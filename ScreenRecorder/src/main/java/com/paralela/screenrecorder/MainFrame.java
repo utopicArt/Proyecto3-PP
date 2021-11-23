@@ -8,7 +8,7 @@ import javax.swing.plaf.basic.BasicInternalFrameUI;
  */
 public class MainFrame extends javax.swing.JFrame{
 
-    int fpsCounter[] = {5, 10, 15, 20, 25, 30, 40, 60};
+    int fpsCounter[] = {5, 12, 15, 20, 25, 30, 40, 60};
     
     public MainFrame() {      
         initComponents();

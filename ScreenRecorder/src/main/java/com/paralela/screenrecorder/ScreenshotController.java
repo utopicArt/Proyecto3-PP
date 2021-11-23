@@ -28,8 +28,8 @@ import javax.swing.JOptionPane;
 import com.aparapi.Kernel;
 
 /**
- * @author: Adrian Marin Alcala 
- * Desc: Controlador de la imagen y reproduccion devideo.
+ * @author: Adrian Marin Alcala Desc: Controlador de la imagen y reproduccion de
+ * video.
  */
 public class ScreenshotController implements ActionListener {
 
@@ -41,8 +41,8 @@ public class ScreenshotController implements ActionListener {
     private Robot robot;
     private Rectangle rec;
     private File folder;
-    
-    private static int recordingSpeed;
+
+    public static int recordingSpeed;
     private static LinkedList<BufferedImage> screenShot;
     private static Queue<BufferedImage> screenShot2Save;
     private static Queue<String> screenshotTimeStamp;
@@ -53,12 +53,11 @@ public class ScreenshotController implements ActionListener {
     private SimpleDateFormat formatter;
     private Thread takeSSTrhead = null;
     private Thread showThread = null;
-    private Kernel saveThread = null;  
-    
+    private Thread saveThread = null;
+
     private static boolean isRecording = false;
     private ImageIcon replayImage;
     static JpegImagesToMovie imageToMovie;
-    
 
     public ScreenshotController(JFrame root, JLabel srcLbl, JButton actionBtn,
             JButton trigger) {
@@ -66,7 +65,7 @@ public class ScreenshotController implements ActionListener {
         this.imageContainer = srcLbl;
         this.controllerBtn = actionBtn;
         this.triggerBtn = trigger;
-        
+
         initVars();
         initRobot();
         initThreads();
@@ -81,7 +80,7 @@ public class ScreenshotController implements ActionListener {
                     "Error al iniciar Robot", JOptionPane.ERROR_MESSAGE);
         }
     }
-    
+
     private void initVars() {
         imageToMovie = new JpegImagesToMovie();
         formatter = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss-SSS");
@@ -94,12 +93,12 @@ public class ScreenshotController implements ActionListener {
         recordingSpeed = 10;
         screenShot = new LinkedList<>();
         screenShot2Save = new LinkedList<>();
-        screenshotTimeStamp = new LinkedList<>();        
-        
-        rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());        
+        screenshotTimeStamp = new LinkedList<>();
+
+        rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
     }
 
-    private synchronized void initThreads() {
+    private void initThreads() {
         if (takeSSTrhead == null) {
             takeSSTrhead = new Thread(() -> {
                 while (true) {
@@ -126,47 +125,43 @@ public class ScreenshotController implements ActionListener {
                         }
                     }
                 }
-            });
+            }, "screenCapture");
         }
         if (showThread == null) {
-            showThread = new Thread(() ->{
-                    while (true) {
-                        showVideo();
-                    }
-                });
+            showThread = new Thread(() -> {
+                while (true) {
+                    showVideo();
+                }
+            }, "realTimeCapture");
         }
         if (saveThread == null) {
-            saveThread = new Kernel() {
-                @Override
-                public void run() {
-                    while (true) {
-                        if (screenShot2Save.peek() != null && screenshotTimeStamp.peek() != null) {
-                            saveScreenshots();
-                        }
-                        if (statusInfo == 2) {
-                            if (screenShot2Save.isEmpty()) {
-                                controllerBtn.setEnabled(false);
-                                try {
-                                    Thread.sleep(1500);
-                                } catch (InterruptedException ex) {
-                                    Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-                                }
-                                createVideo();
-                                statusInfo = 0;
-                                controllerBtn.setEnabled(true);
+            saveThread = new Thread(() -> {
+                while (true) {
+                    saveScreenshots();
+                    
+                    if (statusInfo == 2) {
+                        if (screenShot2Save.isEmpty()) {
+                            controllerBtn.setEnabled(false);
+                            try {
+                                Thread.sleep(1500);
+                            } catch (InterruptedException ex) {
+                                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
                             }
+                            createVideo();
+                            statusInfo = 0;
+                            controllerBtn.setEnabled(true);
                         }
                     }
                 }
-            };
+            }, "Save Screenshots");
         }
     }
-    
-    protected double getMemoryUsage(){
+
+    protected double getMemoryUsage() {
         return Runtime.getRuntime().totalMemory() / (1024.0 * 1024.0 * 1024.0);
     }
 
-    public synchronized void takeScreenshot() throws IOException {
+    public void takeScreenshot() throws IOException {
         if (getMemoryUsage() > 2.85) {
             System.gc();
             System.err.println("\n[!]Sistema de emergencia activado."
@@ -177,23 +172,22 @@ public class ScreenshotController implements ActionListener {
         screenshotTaken = robot.createScreenCapture(rec);
         date = formatter.format(Calendar.getInstance().getTime());
         screenshotTimeStamp.add(directory + date + ".jpg");
-                      
+
         screenShot.add(screenshotTaken);
         screenShot2Save.add(screenshotTaken);
-        System.out.println("Imagen tomada");
-        if (screenShot2Save.peek()!= null && screenshotTimeStamp.peek() != null) {
-            saveScreenshots();
-        }
     }
 
-    private synchronized void saveScreenshots(){
-        try {
-            ImageIO.write(screenShot2Save.poll(), "JPG",      
-                    new File(screenshotTimeStamp.poll()));
-        } catch (IOException ex) {
-            Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-        }finally{
-            System.err.println("SS Guardada");
+    private void saveScreenshots() {
+        System.out.print("");
+        if (screenShot2Save.peek() != null && screenshotTimeStamp.peek() != null) {
+            try {
+                ImageIO.write(screenShot2Save.poll(), "JPG",
+                        new File(screenshotTimeStamp.poll()));
+            } catch (IOException ex) {
+                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+            } finally {
+                System.err.println("SS Guardada");
+            }
         }
     }
 
@@ -231,15 +225,15 @@ public class ScreenshotController implements ActionListener {
             imageToMovie.doIt(screenWidth, screenHeight, recordingSpeed, imgLst, oml);
             screenShot.clear();
             screenShot2Save.clear();
-        }else{
+        } else {
             JOptionPane.showMessageDialog(null,
-                            "Error al crear video:" + "Hay muy pocas imágenes"
-                            + " en el directorio", "Error al crear",
-                            JOptionPane.ERROR_MESSAGE);
+                    "Error al crear video:" + "Hay muy pocas imágenes"
+                    + " en el directorio", "Error al crear",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    public synchronized void showVideo() {
+    public void showVideo() {
         System.out.print("");
         if (screenShot.peek() != null) {
             try {
@@ -264,24 +258,17 @@ public class ScreenshotController implements ActionListener {
         triggerBtn.setBackground((isRecording
                 ? new Color(230, 20, 20) : new Color(189, 189, 189)));
         triggerBtn.setEnabled(false);
-        
-        /*if(saveThread.isExecuting() && !isRecording){
-            try {
-                saveThread.wait();
-            } catch (InterruptedException ex) {
-                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-            }
-        }else if(!saveThread.isExecuting() && statusInfo > 0){
-            saveThread.notifyAll();
-        }*/
-        
+
         if (takeSSTrhead.getState() == Thread.State.NEW) {
             takeSSTrhead.start();
         }
         if (showThread.getState() == Thread.State.NEW) {
             showThread.start();
         }
-  
+        if (saveThread.getState() == Thread.State.NEW) {
+            saveThread.start();
+        }
+
         // Al inicia pesa 248.046875mb
         System.out.println(getMemoryUsage() + "gb");
     }
