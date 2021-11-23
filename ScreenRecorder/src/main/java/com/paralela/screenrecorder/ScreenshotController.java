@@ -138,19 +138,20 @@ public class ScreenshotController implements ActionListener {
             saveThread = new Thread(() -> {
                 while (true) {
                     saveScreenshots();
-                    
                     if (statusInfo == 2) {
-                        if (screenShot2Save.isEmpty()) {
-                            controllerBtn.setEnabled(false);
+                        controllerBtn.setEnabled(false);
+                        while (!screenShot2Save.isEmpty()) {
                             try {
-                                Thread.sleep(1500);
+                                System.err.println("Esperando a que todas las"
+                                        +" imagenes se terminen de guardar");
+                                Thread.sleep(50);
                             } catch (InterruptedException ex) {
                                 Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
                             }
-                            createVideo();
-                            statusInfo = 0;
-                            controllerBtn.setEnabled(true);
                         }
+                        createVideo();
+                        statusInfo = 0;
+                        controllerBtn.setEnabled(true);
                     }
                 }
             }, "Save Screenshots");
