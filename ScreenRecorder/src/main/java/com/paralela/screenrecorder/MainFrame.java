@@ -1,4 +1,6 @@
 package com.paralela.screenrecorder;
+import java.awt.event.WindowEvent;
+import javax.swing.WindowConstants;
 import javax.swing.plaf.basic.BasicInternalFrameUI;
 
 /**
@@ -15,6 +17,11 @@ public class MainFrame extends javax.swing.JFrame{
         jInternalFrame1.setResizable(false);
         setResizable(false);
         setLocationRelativeTo(null);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                System.exit(0);
+            }
+        });
         jButton1.addActionListener(new ScreenshotController(this,
                 imageContainer, jButton1, jButton2));
 
@@ -23,6 +30,14 @@ public class MainFrame extends javax.swing.JFrame{
         setVisible(true);
         jComboBox1.setSelectedIndex(1);
     }
+    
+    protected void processWindowEvent(WindowEvent e) {
+            super.processWindowEvent(e);
+            if(e.getID() == WindowEvent.WINDOW_CLOSING) {
+                System.out.println("Cerrando..");
+                System.exit(0);
+            }
+        }
 
     /**
      * This method is called from within the constructor to initialize the form.
