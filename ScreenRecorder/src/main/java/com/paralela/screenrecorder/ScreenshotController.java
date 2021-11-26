@@ -25,15 +25,15 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
-import com.aparapi.Kernel;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @author: Adrian Marin Alcala Desc: Controlador de la imagen y reproduccion de
- * video.
+ * @author: Adrian Marin Alcala
+ * @see:    Controlador de la toma, carga y reproduccion de video.
  */
+
 public class ScreenshotController implements ActionListener {
 
     JFrame Master;
@@ -54,7 +54,7 @@ public class ScreenshotController implements ActionListener {
 
     private String directory, date;
     private SimpleDateFormat formatter;
-    private ThreadPoolExecutor takeSSTrhead;
+    private ThreadPoolExecutor takeSSThread;
     private ThreadPoolExecutor showThread;
     private ThreadPoolExecutor saveThread;
 
@@ -97,9 +97,9 @@ public class ScreenshotController implements ActionListener {
         screenShot2Save = new LinkedList<>();
         screenshotTimeStamp = new LinkedList<>();
         
-        takeSSTrhead = (ThreadPoolExecutor) Executors.newFixedThreadPool(10);
+        takeSSThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(10);
         showThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(5);
-        saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(5);
+        saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 
         rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
     }
@@ -109,28 +109,13 @@ public class ScreenshotController implements ActionListener {
     }
 
     public void takeScreenshotController() {
-        while (true) {
-            while (isRecording) {
-                try {
-                    takeScreenshot();
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(null,
-                            "Ocurrio un error:" + ex.getMessage(),
-                            "Error al tomar SS", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-            if (statusInfo == 2) {
-                if (screenShot2Save.isEmpty()) {
-                    controllerBtn.setEnabled(false);
-                    try {
-                        Thread.sleep(1500);
-                    } catch (InterruptedException ex) {
-                        Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-                    }
-                    createVideo();
-                    statusInfo = 0;
-                    controllerBtn.setEnabled(true);
-                }
+        while (isRecording) {
+            try {
+                takeScreenshot();
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(null,
+                        "Ocurrio un error:" + ex.getMessage(),
+                        "Error al tomar SS", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -138,7 +123,8 @@ public class ScreenshotController implements ActionListener {
     public void takeScreenshot() throws IOException {
         if (getMemoryUsage() > 2.85) {
             System.gc();
-            System.err.println("\n[!]Sistema de emergencia activado."
+            System.err.println(
+                    "\n[!]Sistema de emergencia activado."
                     + "screenshotTimeStamp: " + screenshotTimeStamp.size()
                     + "screenShot: " + screenShot.size()
                     + "screenShot2Save: " + screenShot2Save.size());
@@ -149,6 +135,7 @@ public class ScreenshotController implements ActionListener {
 
         screenShot.add(screenshotTaken);
         screenShot2Save.add(screenshotTaken);
+        System.out.println("SS tomada");
     }
 
     public void saveScreenshotsController() {
@@ -156,18 +143,12 @@ public class ScreenshotController implements ActionListener {
             saveScreenshots();
             if (statusInfo == 2) {
                 controllerBtn.setEnabled(false);
-                while (!screenShot2Save.isEmpty()) {
-                    try {
-                        System.err.println("Esperando a que todas las"
-                                + " imagenes se terminen de guardar");
-                        Thread.sleep(50);
-                    } catch (InterruptedException ex) {
-                        Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-                    }
+                if (screenShot2Save.isEmpty()) {
+                    createVideo();
+                    statusInfo = 0;
+                    controllerBtn.setEnabled(true);
+                    break;
                 }
-                createVideo();
-                statusInfo = 0;
-                controllerBtn.setEnabled(true);
             }
         }
     }
@@ -231,6 +212,9 @@ public class ScreenshotController implements ActionListener {
     public void showVideoController() {
         while (true) {
             showVideo();
+            if(!isRecording){
+                break;
+            }
         }
     }
 
@@ -247,40 +231,51 @@ public class ScreenshotController implements ActionListener {
             }
         }
     }
-
-    private void shutdownThread(ThreadPoolExecutor current, String threadName) {
-        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-            @Override
-            public void run() {
-                System.out.println("Terminando hilo \"" + threadName + "\"...");
-                current.shutdown();
-                while (true) {
-                    try {
-                        System.out.println("Espere a que el hilo termine..");
-                        if (current.awaitTermination(5, TimeUnit.SECONDS)) {
-                            break;
-                        }
-                    } catch (InterruptedException e) {
-                    }
+    
+    private void waitUntilSaveIsDone(){
+        while (!saveThread.isTerminated()) {
+            System.err.print("Waiting until all images are saved....");
+            try {
+                if (saveThread.awaitTermination(200, TimeUnit.MILLISECONDS)) {
+                    break;
                 }
-                System.out.println("Hilo termino correctamente");
+            } catch (InterruptedException ex) {
+                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
             }
-        }));
+        }
     }
     
-    private void submitTasks() {
-        takeSSTrhead.submit(() -> {
-            takeScreenshotController();
-        });
-        showThread.submit(() -> {
-            showVideoController();
-        });
+    private boolean wasActivated = false;
+
+    private void submitTasks() throws InterruptedException {
+        if(wasActivated){
+            //waitUntilSaveIsDone();
+        }
+        takeSSThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(10);
+        showThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(5);
+        saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+        
+        for (int i = 0; i < 10; i++) {
+            takeSSThread.submit(() -> {
+                takeScreenshotController();
+                return 0;
+            });
+        }
+        
+        for (int i = 0; i < 5; i++) {
+            showThread.submit(() -> {
+                showVideoController();
+                return 0;
+            });
+        }
+
         saveThread.submit(() -> {
             saveScreenshotsController();
+            return 0;
         });
+        wasActivated = true;
     }
-    
-    boolean wasActivated = false;
+
     @Override
     public void actionPerformed(ActionEvent evt) {
         controllerBtn.setText((isRecording ? "Iniciar Grabación" : "Detener Grabación"));
@@ -295,15 +290,12 @@ public class ScreenshotController implements ActionListener {
         
         if(isRecording){
             System.out.println("Creando tareas..");
-            submitTasks();
-        }else if(!isRecording){
-            System.out.println("Terminando tareas..");
-            //shutdownThread(takeSSTrhead, "Take Screenshot");
-            //shutdownThread(showThread, "Show Images");
-            takeSSTrhead.shutdownNow();
-            showThread.shutdownNow();
-            shutdownThread(saveThread, "Save Screenshots");
-        }              
+            try {
+                submitTasks();
+            } catch (InterruptedException ex) {
+                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
 
         // Al inicia pesa 248.046875mb
         System.out.println(getMemoryUsage() + "gb");
