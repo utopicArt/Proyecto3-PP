@@ -2,24 +2,25 @@ package com.paralela.screenrecorder;
 
 import java.awt.AWTException;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.awt.Robot;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
-import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
-import javax.media.MediaLocator;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -27,7 +28,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+
 
 /**
  * @author: Adrian Marin Alcala
@@ -43,16 +44,15 @@ public class ScreenshotController implements ActionListener {
 
     private Robot robot;
     private Rectangle rec;
-    private File folder;
 
     public static int recordingSpeed;
     private static LinkedList<BufferedImage> screenShot;
     private static Queue<BufferedImage> screenShot2Save;
     private static Queue<String> screenshotTimeStamp;
     private BufferedImage screenshotTaken;
-    private int statusInfo = 0;
+    private int proccessLevel = 0;
 
-    private String directory, date;
+    private String date;
     private SimpleDateFormat formatter;
     private ThreadPoolExecutor takeSSThread;
     private ThreadPoolExecutor showThread;
@@ -60,7 +60,12 @@ public class ScreenshotController implements ActionListener {
 
     private static boolean isRecording = false;
     private ImageIcon replayImage;
-    static JpegImagesToMovie imageToMovie;
+    //static JpegImagesToMovie imageToMovie;
+    
+    private InterfazRemota mir;
+    
+    private String dataEncoded;
+    private String serverSaveStatus;
 
     public ScreenshotController(JFrame root, JLabel srcLbl, JButton actionBtn,
             JButton trigger) {
@@ -71,6 +76,7 @@ public class ScreenshotController implements ActionListener {
 
         initVars();
         initRobot();
+        initClient();
     }
 
     private void initRobot() {
@@ -84,13 +90,8 @@ public class ScreenshotController implements ActionListener {
     }
 
     private void initVars() {
-        imageToMovie = new JpegImagesToMovie();
+        //imageToMovie = new JpegImagesToMovie();
         formatter = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss-SSS");
-        directory = System.getProperty("user.dir") + "\\src\\internal\\Screenshots\\";
-        folder = new File(directory);
-        if (!folder.isDirectory()) {
-            new File(directory).mkdirs();
-        }
 
         recordingSpeed = 10;
         screenShot = new LinkedList<>();
@@ -102,6 +103,15 @@ public class ScreenshotController implements ActionListener {
         saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 
         rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+    }
+    
+    private void initClient(){
+        try {
+            mir = (InterfazRemota)java.rmi.Naming.lookup("//"
+                    + "192.168.200.189:1234/PruebaRMI");
+        }catch (MalformedURLException | NotBoundException | RemoteException e){
+            System.out.println("Error, no encuentro: " + e.getMessage());
+        }        
     }
 
     protected double getMemoryUsage() {
@@ -131,7 +141,7 @@ public class ScreenshotController implements ActionListener {
         }
         screenshotTaken = robot.createScreenCapture(rec);
         date = formatter.format(Calendar.getInstance().getTime());
-        screenshotTimeStamp.add(directory + date + ".jpg");
+        screenshotTimeStamp.add(date + ".jpg");
 
         screenShot.add(screenshotTaken);
         screenShot2Save.add(screenshotTaken);
@@ -141,11 +151,13 @@ public class ScreenshotController implements ActionListener {
     public void saveScreenshotsController() {
         while (true) {
             saveScreenshots();
-            if (statusInfo == 2) {
+            if (proccessLevel == 2) {
                 controllerBtn.setEnabled(false);
                 if (screenShot2Save.isEmpty()) {
-                    createVideo();
-                    statusInfo = 0;
+                    //createVideo();
+                    screenShot.clear();
+                    screenShot2Save.clear();
+                    proccessLevel = 0;
                     controllerBtn.setEnabled(true);
                     break;
                 }
@@ -157,17 +169,42 @@ public class ScreenshotController implements ActionListener {
         System.out.print("");
         if (screenShot2Save.peek() != null && screenshotTimeStamp.peek() != null) {
             try {
-                ImageIO.write(screenShot2Save.poll(), "JPG",
-                        new File(screenshotTimeStamp.poll()));
-            } catch (IOException ex) {
+                dataEncoded = encodeImageToString(screenShot2Save.poll());
+                serverSaveStatus = mir.decodeBase64ToImage(dataEncoded,
+                        screenshotTimeStamp.poll());
+                System.out.println(serverSaveStatus);
+            } catch (RemoteException ex) {
                 Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
-            } finally {
-                System.err.println("SS Guardada");
             }
+            /*try {
+                //directory + date + ".jpg"
+                ImageIO.write(screenShot2Save.poll(), "JPG", new File(screenshotTimeStamp.poll()));
+            } catch (IOException e) {
+                System.err.println("Error al guardar: " + e.getMessage());
+            } finally {
+                System.out.println("Imagen Guardada en el Servidor");
+            }*/
         }
     }
 
-    private void createVideo() {
+    private String encodeImageToString(BufferedImage image) {
+        String imageString = null;
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+
+        try {
+            ImageIO.write(image, "JPG", bos);
+            byte[] imageBytes = bos.toByteArray();
+
+            Base64.Encoder encoder = Base64.getEncoder();
+            imageString = encoder.encodeToString(imageBytes);
+            bos.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return imageString;
+    }
+
+    /*private void createVideo() {
         if (folder.listFiles().length > 1) {
             System.out.println("[CREANDO VIDEO]");
             File[] listOfFiles = folder.listFiles();
@@ -207,7 +244,7 @@ public class ScreenshotController implements ActionListener {
                     + " en el directorio", "Error al crear",
                     JOptionPane.ERROR_MESSAGE);
         }
-    }
+    }*/
 
     public void showVideoController() {
         while (true) {
@@ -228,19 +265,6 @@ public class ScreenshotController implements ActionListener {
                 Thread.sleep((long) 16.6666667);
             } catch (InterruptedException ex) {
                 Logger.getLogger(MainFrame.class.getName()).log(Level.SEVERE, null, ex);
-            }
-        }
-    }
-    
-    private void waitUntilSaveIsDone(){
-        while (!saveThread.isTerminated()) {
-            System.err.print("Waiting until all images are saved....");
-            try {
-                if (saveThread.awaitTermination(200, TimeUnit.MILLISECONDS)) {
-                    break;
-                }
-            } catch (InterruptedException ex) {
-                Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }
@@ -281,7 +305,7 @@ public class ScreenshotController implements ActionListener {
         controllerBtn.setText((isRecording ? "Iniciar Grabación" : "Detener Grabación"));
         isRecording = !isRecording;
 
-        statusInfo++;
+        proccessLevel++;
 
         triggerBtn.setEnabled(true);
         triggerBtn.setBackground((isRecording
