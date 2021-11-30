@@ -9,6 +9,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.rmi.NotBoundException;
@@ -60,12 +63,12 @@ public class ScreenshotController implements ActionListener {
 
     private static boolean isRecording = false;
     private ImageIcon replayImage;
-    //static JpegImagesToMovie imageToMovie;
     
     private InterfazRemota mir;
     
     private String dataEncoded;
     private String serverSaveStatus;
+    private String videoDirectory;
 
     public ScreenshotController(JFrame root, JLabel srcLbl, JButton actionBtn,
             JButton trigger) {
@@ -90,10 +93,9 @@ public class ScreenshotController implements ActionListener {
     }
 
     private void initVars() {
-        //imageToMovie = new JpegImagesToMovie();
         formatter = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss-SSS");
 
-        recordingSpeed = 10;
+        recordingSpeed = 12;
         screenShot = new LinkedList<>();
         screenShot2Save = new LinkedList<>();
         screenshotTimeStamp = new LinkedList<>();
@@ -103,6 +105,10 @@ public class ScreenshotController implements ActionListener {
         saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 
         rec = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+        videoDirectory = System.getProperty("user.dir") + "\\Videos\\";
+        File vD = new File(videoDirectory);
+        if (!vD.isDirectory())
+            new File(videoDirectory).mkdirs();
     }
     
     private void initClient(){
@@ -147,6 +153,30 @@ public class ScreenshotController implements ActionListener {
         screenShot2Save.add(screenshotTaken);
         System.out.println("SS tomada");
     }
+    
+    private void downloadVideo(){
+        try {
+            System.out.println("[!]Descargando video...");
+            byte[] video = mir.downloadVideo(recordingSpeed);
+            System.out.println("[./]Video Descargado: " + video.length);
+            System.out.println("[./]Video Encodeado: " + mir.videoSize());
+            File filePath = new File(videoDirectory);
+            if(!filePath.isDirectory())
+                new File(videoDirectory).mkdirs();
+            try (FileOutputStream out = new FileOutputStream(mir.videoName())){
+                out.write(video);
+                out.flush();
+            }            
+        } catch (RemoteException ex) {
+            System.out.println("Excepcion Remota: " + ex.getMessage());
+        } catch (FileNotFoundException ex) {
+            System.out.println("Excepcion Archivo no encontrado: " + ex.getMessage());
+        } catch (IOException ex) {
+            System.out.println("Excepcion de Escritura: " + ex.getMessage());
+        }
+        System.out.println("[./]Video guardado correctamente.");
+        controllerBtn.setEnabled(true);
+    }
 
     public void saveScreenshotsController() {
         while (true) {
@@ -154,11 +184,10 @@ public class ScreenshotController implements ActionListener {
             if (proccessLevel == 2) {
                 controllerBtn.setEnabled(false);
                 if (screenShot2Save.isEmpty()) {
-                    //createVideo();
+                    downloadVideo();
                     screenShot.clear();
                     screenShot2Save.clear();
                     proccessLevel = 0;
-                    controllerBtn.setEnabled(true);
                     break;
                 }
             }
@@ -176,14 +205,6 @@ public class ScreenshotController implements ActionListener {
             } catch (RemoteException ex) {
                 Logger.getLogger(ScreenshotController.class.getName()).log(Level.SEVERE, null, ex);
             }
-            /*try {
-                //directory + date + ".jpg"
-                ImageIO.write(screenShot2Save.poll(), "JPG", new File(screenshotTimeStamp.poll()));
-            } catch (IOException e) {
-                System.err.println("Error al guardar: " + e.getMessage());
-            } finally {
-                System.out.println("Imagen Guardada en el Servidor");
-            }*/
         }
     }
 
@@ -204,48 +225,6 @@ public class ScreenshotController implements ActionListener {
         return imageString;
     }
 
-    /*private void createVideo() {
-        if (folder.listFiles().length > 1) {
-            System.out.println("[CREANDO VIDEO]");
-            File[] listOfFiles = folder.listFiles();
-
-            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-            int screenWidth = (int) screenSize.getWidth();
-            int screenHeight = (int) screenSize.getHeight();
-
-            formatter = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
-            String outputFile = formatter.format(Calendar.getInstance()
-                    .getTime()) + ".mp4";
-
-            ArrayList<String> imgLst = new ArrayList<>();
-
-            System.out.println("Obteniendo imagenes de: " + this.directory);
-            System.out.println("Imagenes encontradas: " + listOfFiles.length);
-
-            for (File listOfFile : listOfFiles) {
-                imgLst.add(listOfFile.getAbsolutePath());
-            }
-            imgLst.forEach((name) -> {
-                System.out.println("Procesando: " + name);
-            });
-
-            MediaLocator oml;
-            if ((oml = JpegImagesToMovie.createMediaLocator(outputFile)) == null) {
-                System.err.println("No se puede construir media locator de: " + outputFile);
-                System.exit(0);
-            }
-
-            imageToMovie.doIt(screenWidth, screenHeight, recordingSpeed, imgLst, oml);
-            screenShot.clear();
-            screenShot2Save.clear();
-        } else {
-            JOptionPane.showMessageDialog(null,
-                    "Error al crear video:" + "Hay muy pocas imágenes"
-                    + " en el directorio", "Error al crear",
-                    JOptionPane.ERROR_MESSAGE);
-        }
-    }*/
-
     public void showVideoController() {
         while (true) {
             showVideo();
@@ -263,18 +242,14 @@ public class ScreenshotController implements ActionListener {
                 replayImage = new ImageIcon(screenShot.poll());
                 imageContainer.setIcon(replayImage);
                 Thread.sleep((long) 16.6666667);
-            } catch (InterruptedException ex) {
-                Logger.getLogger(MainFrame.class.getName()).log(Level.SEVERE, null, ex);
+            } catch(InterruptedException ex) {
+                System.out.println("Ocurrio una interrupcion al mostrar: " 
+                        + ex.getMessage());
             }
         }
     }
-    
-    private boolean wasActivated = false;
 
     private void submitTasks() throws InterruptedException {
-        if(wasActivated){
-            //waitUntilSaveIsDone();
-        }
         takeSSThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(10);
         showThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(5);
         saveThread = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
@@ -297,7 +272,6 @@ public class ScreenshotController implements ActionListener {
             saveScreenshotsController();
             return 0;
         });
-        wasActivated = true;
     }
 
     @Override
