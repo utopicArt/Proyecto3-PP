@@ -34,7 +34,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 
 /**
- * @author: Adrian Marin Alcala
+ * @author: 
  * @see:    Controlador de la toma, carga y reproduccion de video.
  */
 
