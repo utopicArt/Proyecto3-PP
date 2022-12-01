@@ -4,7 +4,7 @@ import javax.swing.plaf.basic.BasicInternalFrameUI;
 
 /**
  *
- * @author: Adrian Marin Alcala
+ * @author: Adrian
  * Desc:    Aplicacion gráfica de grabacion de pantalla
  */
 public class MainFrame extends javax.swing.JFrame{
