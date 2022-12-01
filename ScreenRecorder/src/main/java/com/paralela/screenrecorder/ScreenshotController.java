@@ -30,7 +30,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @author: Adrian Marin Alcala
+ * @author: 
  * @see:    Controlador de la toma, carga y reproduccion de video.
  */
 
