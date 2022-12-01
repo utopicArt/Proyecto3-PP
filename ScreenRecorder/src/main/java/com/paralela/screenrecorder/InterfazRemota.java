@@ -1,7 +1,7 @@
 package com.paralela.screenrecorder;
 
 /**
- * @author Adrian Marin Alcala
+ * @author 
  * Desc: Interfaz remota.
  */
 public interface InterfazRemota extends java.rmi.Remote{
